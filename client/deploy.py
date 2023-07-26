@@ -15,7 +15,7 @@ class Client:
     def parse_args(self):
         parser = argparse.ArgumentParser(description="Client for git-notify")
         parser.add_argument("-s", "--server", type=str, help="Server URL", required=True)
-        parser.add_argument("-r", "--repo", type=str, help="Repository URL", required=True)
+        parser.add_argument("-r", "--repo", type=str, help="GitHub Repository", required=True)
         parser.add_argument("-b", "--branch", type=str, help="Branch name", required=True)
         parser.add_argument("-c", "--command", type=str, help="Command to run", required=True)
 
@@ -51,7 +51,8 @@ class Client:
                 }
             }))
         elif command == "pull_request_closed":
-            print("Pull request closed")
+            if recvData["data"]["repo"] != self.repo or recvData["data"]["pull_request"]["base"]["ref"] != self.branch:
+                return
             self.restart_command()
 
 if __name__ == "__main__":
