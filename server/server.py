@@ -76,32 +76,25 @@ class Server:
                 contentSize = int(contentSize)
             content = self.rfile.read(contentSize)
             webhookData = json.loads(content)
-            if "zen" in webhookData:
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"pong")
-                return
+            self.responseOK()
             if "action" not in webhookData:
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"ok")
                 return
-            if webhookData["action"] != "closed":
-                self.send_response(200)
-                self.end_headers()
-                self.wfile.write(b"ok")
+            if webhookData["action"] != "closed" or "pull_request" not in webhookData:
                 return
-            repo = webhookData["repository"]["full_name"]
-            clients = self.server.parent.getRepoClient(repo)
-            for client in clients:
-                self.server.parent.websocket_server.send_message(client["client"], json.dumps({
-                    "status": "ok",
-                    "command": "pull_request_closed",
-                    "data": {
-                        "repo": repo,
-                        "pull_request": webhookData["pull_request"]
-                    }
-                }))
+            if webhookData["pull_request"]["merged"] == True:
+                repo = webhookData["repository"]["full_name"]
+                clients = self.server.parent.getRepoClient(repo)
+                for client in clients:
+                    self.server.parent.websocket_server.send_message(client["client"], json.dumps({
+                        "status": "ok",
+                        "command": "pull_request_closed",
+                        "data": {
+                            "repo": repo,
+                            "pull_request": webhookData["pull_request"]
+                        }
+                    }))
+
+        def responseOK(self):
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"ok")
