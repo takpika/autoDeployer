@@ -47,10 +47,10 @@ class Server:
         recvData = json.loads(message)
         command = recvData["command"]
         if command == "register":
-            repoURL = recvData["data"]["repo"]
+            repo = recvData["data"]["repo"]
             self.clients[client["id"]] = {
                 "client": client,
-                "repo": repoURL
+                "repo": repo
             }
             server.send_message(client, json.dumps({
                 "status": "ok",
@@ -91,14 +91,14 @@ class Server:
                 self.end_headers()
                 self.wfile.write(b"ok")
                 return
-            repoURL = webhookData["repository"]["html_url"]
-            clients = self.server.parent.getRepoClient(repoURL)
+            repo = webhookData["repository"]["full_name"]
+            clients = self.server.parent.getRepoClient(repo)
             for client in clients:
                 self.server.parent.websocket_server.send_message(client["client"], json.dumps({
                     "status": "ok",
                     "command": "pull_request_closed",
                     "data": {
-                        "repo": repoURL,
+                        "repo": repo,
                         "pull_request": webhookData["pull_request"]
                     }
                 }))
