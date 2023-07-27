@@ -38,18 +38,19 @@ class Client:
     def parse_args(self):
         parser = argparse.ArgumentParser(description="Client for git-notify")
         parser.add_argument("-s", "--server", type=str, help="Server URL", required=True)
+        parser.add_argument("-p", "--password", type=str, help="Password", required=False, default="")
         parser.add_argument("-r", "--repo", type=str, help="GitHub Repository", required=True)
-        parser.add_argument("-b", "--branch", type=str, help="Branch name", required=True)
+        parser.add_argument("-b", "--branch", type=str, help="Branch name", required=False, default="main")
         parser.add_argument("-c", "--command", type=str, help="Command to run", required=True)
 
         args = parser.parse_args()
         self.server = args.server
         self.branch = args.branch
+        self.password = args.password
         self.repo = args.repo
         self.command = args.command
 
     def run_command(self):
-        subprocess.run(["git", "pull"], stdout=DEVNULL, stderr=DEVNULL)
         self.process = subprocess.Popen(self.command, shell=True)
 
     def stop_command(self):
