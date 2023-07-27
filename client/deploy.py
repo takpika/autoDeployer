@@ -46,7 +46,8 @@ class Client:
         args = parser.parse_args()
         self.server = args.server
         self.branch = args.branch
-        self.password = args.password
+        if args.password != "" or self.password == "":
+            self.password = args.password
         self.repo = args.repo
         self.command = args.command
 
