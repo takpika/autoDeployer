@@ -1,5 +1,6 @@
+#!/usr/bin/env python3
 from websocket_server import WebsocketServer
-import json, threading, hashlib, os, urllib.parse, hmac
+import json, threading, hashlib, os, hmac
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from time import sleep

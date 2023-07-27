@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse, subprocess, json
 import websocket, hashlib, os
 
