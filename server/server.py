@@ -1,5 +1,5 @@
 from websocket_server import WebsocketServer
-import json, threading
+import json, threading, hashlib, os, urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from time import sleep
@@ -10,7 +10,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
         super().__init__(server_address, RequestHandlerClass)
 
 class Server:
-    def __init__(self, websocket_port, http_port):
+    def __init__(self, websocket_port, http_port, password:str = ""):
+        self.password = password
         self.websocket_port = websocket_port
         self.http_port = http_port
         self.websocket_server = WebsocketServer(host='127.0.0.1', port=websocket_port)
@@ -69,6 +70,9 @@ class Server:
 
     class HTTPRequestHandler(BaseHTTPRequestHandler):
         def do_POST(self):
+            querys = {}
+            if "?" in self.path:
+                querys = urllib.parse.parse_qs(self.path.split("?")[1])
             contentSize = self.headers.get('Content-Length')
             if contentSize is None:
                 contentSize = 0
@@ -76,31 +80,54 @@ class Server:
                 contentSize = int(contentSize)
             content = self.rfile.read(contentSize)
             webhookData = json.loads(content)
-            self.responseOK()
+            if "zen" in webhookData:
+                self.responseOK()
+            if self.handleRequest(webhookData, querys):
+                self.responseOK()
+            else:
+                self.responseError("error")
+
+        def handleRequest(self, webhookData: dict, querys: dict) -> bool:
             if "action" not in webhookData:
-                return
+                return False
             if webhookData["action"] != "closed" or "pull_request" not in webhookData:
-                return
+                return False
             if webhookData["pull_request"]["merged"] == True:
                 repo = webhookData["repository"]["full_name"]
-                clients = self.server.parent.getRepoClient(repo)
-                for client in clients:
-                    self.server.parent.websocket_server.send_message(client["client"], json.dumps({
-                        "status": "ok",
-                        "command": "pull_request_closed",
-                        "data": {
-                            "repo": repo,
-                            "pull_request": webhookData["pull_request"]
-                        }
-                    }))
+                if not "k" in querys:
+                    return False
+                if self.genHash(repo, self.server.parent.password) == querys["k"][0]:
+                    clients = self.server.parent.getRepoClient(repo)
+                    for client in clients:
+                        self.server.parent.websocket_server.send_message(client["client"], json.dumps({
+                            "status": "ok",
+                            "command": "pull_request_closed",
+                            "data": {
+                                "repo": repo,
+                                "pull_request": webhookData["pull_request"]
+                            }
+                        }))
+                    return True
+            return False
 
         def responseOK(self):
             self.send_response(200)
             self.end_headers()
-            self.wfile.write(b"ok")
+            self.wfile.write(json.dumps({}).encode())
+
+        def responseError(self, message: str):
+            self.send_response(400)
+            self.end_headers()
+            self.wfile.write(json.dumps({}).encode())
+
+        def genHash(self, repo: str, password: str) -> str:
+            return hashlib.sha256(("%s:%s" % (repo, password)).encode()).hexdigest()
 
 if __name__ == "__main__":
-    server = Server(9001, 9002)
+    password = ""
+    if "GIT_NOTIFY_PASSWORD" in os.environ:
+        password = os.environ["GIT_NOTIFY_PASSWORD"]
+    server = Server(9001, 9002, password)
     while True:
         sleep(60)
         pass
