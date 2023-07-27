@@ -1,5 +1,5 @@
 from websocket_server import WebsocketServer
-import json, threading, hashlib, os, urllib.parse
+import json, threading, hashlib, os, urllib.parse, hmac
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 from time import sleep
@@ -47,67 +47,74 @@ class Server:
     def message_received(self, client, server, message):
         recvData = json.loads(message)
         command = recvData["command"]
+        sendData = {
+            "status": "error",
+            "command": command,
+            "data": {}
+        }
         if command == "register":
             repo = recvData["data"]["repo"]
-            self.clients[client["id"]] = {
-                "client": client,
-                "repo": repo
-            }
-            server.send_message(client, json.dumps({
-                "status": "ok",
-                "command": "register",
-                "data": {}
-            }))
+            hash = recvData["data"]["hash"]
+            if self.genHash(repo, self.password) == hash:
+                self.clients[client["id"]] = {
+                    "client": client,
+                    "repo": repo
+                }
+                sendData["status"] = "ok"
+            else:
+                sendData["data"]["message"] = "Invalid password"
         else:
             print("Unknown command: %s" % command)
-            server.send_message(client, json.dumps({
-                "status": "error",
-                "command": command,
-                "data": {
-                    "message": "Unknown command"
-                }
-            }))
+            sendData["data"]["message"] = "Unknown command"
+        server.send_message(client, json.dumps(sendData))
+
+    def genHash(self, repo: str, password: str) -> str:
+        return hashlib.sha256(("%s:%s" % (repo, password)).encode()).hexdigest()
 
     class HTTPRequestHandler(BaseHTTPRequestHandler):
         def do_POST(self):
-            querys = {}
-            if "?" in self.path:
-                querys = urllib.parse.parse_qs(self.path.split("?")[1])
-            contentSize = self.headers.get('Content-Length')
-            if contentSize is None:
-                contentSize = 0
-            else:
-                contentSize = int(contentSize)
+            headers = self.headers
+            if "X-Hub-Signature-256" not in headers or "Content-Length" not in headers:
+                self.responseError("error")
+                return
+            signature = headers["X-Hub-Signature-256"].replace("sha256=", "")
+            contentSize = int(self.headers.get('Content-Length'))
             content = self.rfile.read(contentSize)
             webhookData = json.loads(content)
+            if not "repository" in webhookData:
+                self.responseError("error")
+                return
+            repo = webhookData["repository"]["full_name"]
+            password = self.server.parent.genHash(repo, self.server.parent.password)
+            signatureHash = hmac.new(password.encode(), content, hashlib.sha256).hexdigest()
+            if signatureHash != signature:
+                self.responseError("error")
+                return
             if "zen" in webhookData:
                 self.responseOK()
-            if self.handleRequest(webhookData, querys):
+            if self.handleRequest(webhookData):
                 self.responseOK()
             else:
                 self.responseError("error")
 
-        def handleRequest(self, webhookData: dict, querys: dict) -> bool:
+        def handleRequest(self, webhookData: dict) -> bool:
             if "action" not in webhookData:
                 return False
             if webhookData["action"] != "closed" or "pull_request" not in webhookData:
                 return False
             if webhookData["pull_request"]["merged"] == True:
                 repo = webhookData["repository"]["full_name"]
-                if not "k" in querys:
-                    return False
-                if self.genHash(repo, self.server.parent.password) == querys["k"][0]:
-                    clients = self.server.parent.getRepoClient(repo)
-                    for client in clients:
-                        self.server.parent.websocket_server.send_message(client["client"], json.dumps({
-                            "status": "ok",
-                            "command": "pull_request_closed",
-                            "data": {
-                                "repo": repo,
-                                "pull_request": webhookData["pull_request"]
-                            }
-                        }))
-                    return True
+                clients = self.server.parent.getRepoClient(repo)
+                for client in clients:
+                    self.server.parent.websocket_server.send_message(client["client"], json.dumps({
+                        "status": "ok",
+                        "command": "pull_request_closed",
+                        "data": {
+                            "repo": repo,
+                            "pull_request": webhookData["pull_request"]
+                        }
+                    }))
+                return True
             return False
 
         def responseOK(self):
@@ -119,9 +126,6 @@ class Server:
             self.send_response(400)
             self.end_headers()
             self.wfile.write(json.dumps({}).encode())
-
-        def genHash(self, repo: str, password: str) -> str:
-            return hashlib.sha256(("%s:%s" % (repo, password)).encode()).hexdigest()
 
 if __name__ == "__main__":
     password = ""

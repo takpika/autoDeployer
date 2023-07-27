@@ -1,11 +1,11 @@
 import argparse, subprocess, json
-import websocket
+import websocket, hashlib, os
 
 DEVNULL = open("/dev/null", "w")
 
 class Client:
-    def __init__(self):
-        pass
+    def __init__(self, password:str = ""):
+        self.password = password
 
     def run(self):
         self.parse_args()
@@ -48,14 +48,25 @@ class Client:
             ws.send(json.dumps({
                 "command": "register",
                 "data": {
-                    "repo": self.repo
+                    "repo": self.repo,
+                    "hash": self.genHash(self.repo, self.password)
                 }
             }))
+        elif command == "register":
+            if recvData["status"] == "error":
+                print("Failed to register: %s" % recvData["data"]["message"])
+                exit(1)
         elif command == "pull_request_closed":
             if recvData["data"]["repo"] != self.repo or recvData["data"]["pull_request"]["base"]["ref"] != self.branch:
                 return
             self.restart_command()
 
+    def genHash(self, repo: str, password: str) -> str:
+        return hashlib.sha256(("%s:%s" % (repo, password)).encode()).hexdigest()
+
 if __name__ == "__main__":
-    client = Client()
+    password = ""
+    if "GIT_NOTIFY_PASSWORD" in os.environ:
+        password = os.environ["GIT_NOTIFY_PASSWORD"]
+    client = Client(password)
     client.run()
