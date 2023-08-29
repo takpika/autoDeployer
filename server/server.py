@@ -97,28 +97,31 @@ class Server:
     class HTTPRequestHandler(BaseHTTPRequestHandler):
         def do_POST(self):
             headers = self.headers
-            if "X-Hub-Signature-256" not in headers or "Content-Length" not in headers:
-                self.responseError("error")
+            if "" not in headers:
+                self.responseError("\"X-Hub-Signature-256\" not found in headers")
+                return
+            if "Content-Length" not in headers:
+                self.responseError("\"Content-Length\" not found in headers")
                 return
             signature = headers["X-Hub-Signature-256"].replace("sha256=", "")
             contentSize = int(self.headers.get('Content-Length'))
             content = self.rfile.read(contentSize)
             webhookData = json.loads(content)
             if not "repository" in webhookData:
-                self.responseError("error")
+                self.responseError("No Repository data")
                 return
             repo = webhookData["repository"]["full_name"]
             password = self.server.parent.genHash(repo, self.server.parent.password)
             signatureHash = hmac.new(password.encode(), content, hashlib.sha256).hexdigest()
             if signatureHash != signature:
-                self.responseError("error")
+                self.responseError("Signature Error")
                 return
             if "zen" in webhookData:
                 self.responseOK()
             if self.handleRequest(webhookData):
                 self.responseOK()
             else:
-                self.responseError("error")
+                self.responseError("Something went wrong while handling data")
 
         def handleRequest(self, webhookData: dict) -> bool:
             if "action" not in webhookData:
@@ -148,7 +151,7 @@ class Server:
         def responseError(self, message: str):
             self.send_response(400)
             self.end_headers()
-            self.wfile.write(json.dumps({}).encode())
+            self.wfile.write(json.dumps({"message": message}).encode())
 
 if __name__ == "__main__":
     password = ""
