@@ -97,7 +97,7 @@ class Server:
     class HTTPRequestHandler(BaseHTTPRequestHandler):
         def do_POST(self):
             headers = self.headers
-            if "" not in headers:
+            if "X-Hub-Signature-256" not in headers:
                 self.responseError("\"X-Hub-Signature-256\" not found in headers", 400)
                 return
             if "Content-Length" not in headers:
