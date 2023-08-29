@@ -98,30 +98,30 @@ class Server:
         def do_POST(self):
             headers = self.headers
             if "" not in headers:
-                self.responseError("\"X-Hub-Signature-256\" not found in headers")
+                self.responseError("\"X-Hub-Signature-256\" not found in headers", 400)
                 return
             if "Content-Length" not in headers:
-                self.responseError("\"Content-Length\" not found in headers")
+                self.responseError("\"Content-Length\" not found in headers", 411)
                 return
             signature = headers["X-Hub-Signature-256"].replace("sha256=", "")
             contentSize = int(self.headers.get('Content-Length'))
             content = self.rfile.read(contentSize)
             webhookData = json.loads(content)
             if not "repository" in webhookData:
-                self.responseError("No Repository data")
+                self.responseError("No Repository data", 404)
                 return
             repo = webhookData["repository"]["full_name"]
             password = self.server.parent.genHash(repo, self.server.parent.password)
             signatureHash = hmac.new(password.encode(), content, hashlib.sha256).hexdigest()
             if signatureHash != signature:
-                self.responseError("Signature Error")
+                self.responseError("Signature Error", 401)
                 return
             if "zen" in webhookData:
                 self.responseOK()
             if self.handleRequest(webhookData):
                 self.responseOK()
             else:
-                self.responseError("Something went wrong while handling data")
+                self.responseError("Something went wrong while handling data", 406)
 
         def handleRequest(self, webhookData: dict) -> bool:
             if "action" not in webhookData:
@@ -148,8 +148,8 @@ class Server:
             self.end_headers()
             self.wfile.write(json.dumps({}).encode())
 
-        def responseError(self, message: str):
-            self.send_response(400)
+        def responseError(self, message: str, statusCode: int = 400):
+            self.send_response(statusCode)
             self.end_headers()
             self.wfile.write(json.dumps({"message": message}).encode())
 
