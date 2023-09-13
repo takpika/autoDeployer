@@ -55,7 +55,9 @@ class Client:
         self.process = subprocess.Popen(self.command, shell=True)
 
     def stop_command(self):
-        self.process.terminate()
+        while self.process.poll() is None:
+            self.process.terminate()
+            self.process.wait(timeout=5)
 
     def restart_command(self):
         self.stop_command()
