@@ -56,7 +56,7 @@ class Client:
 
     def stop_command(self):
         while self.process.poll() is None:
-            self.process.terminate()
+            self.process.kill()
             self.process.wait(timeout=5)
 
     def restart_command(self):
