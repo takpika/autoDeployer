@@ -21,7 +21,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import argparse, subprocess, json
+import argparse, subprocess, json, signal, psutil
 import websocket, hashlib, os
 
 DEVNULL = open("/dev/null", "w")
@@ -29,6 +29,7 @@ DEVNULL = open("/dev/null", "w")
 class Client:
     def __init__(self, password:str = ""):
         self.password = password
+        self.restarting = False
 
     def run(self):
         self.parse_args()
@@ -55,13 +56,21 @@ class Client:
         self.process = subprocess.Popen(self.command, shell=True)
 
     def stop_command(self):
-        while self.process.poll() is None:
-            self.process.kill()
-            self.process.wait(timeout=5)
+        try:
+            parent = psutil.Process(self.process.pid)
+            for child in parent.children(recursive=True):
+                child.kill()
+            parent.kill()
+        except:
+            pass
 
     def restart_command(self):
+        if self.restarting:
+            return
+        self.restarting = True
         self.stop_command()
         self.run_command()
+        self.restarting = False
 
     def connectWebsocket(self):
         self.ws = websocket.WebSocketApp(self.server,
